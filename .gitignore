@@ -1,0 +1,25 @@
+.venv/
+venv/
+*.egg-info/
+third_party/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+.huggingface/
+hf_cache/
+# Local IDM-VTON snapshot at repo root only (not siliconvton/models/)
+/models/
+outputs/
+assets/outputs/
+*.log
+.ipynb_checkpoints/
+wandb/
+.idea/
+.vscode/

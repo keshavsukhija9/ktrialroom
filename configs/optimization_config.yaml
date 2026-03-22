@@ -1,0 +1,10 @@
+optimization:
+  precision: "fp16"   # fp16 | fp32
+  enable_cpu_offload: true
+  enable_model_cpu_offload: true
+  enable_sequential_cpu_offload: false
+
+benchmarking:
+  warmup_runs: 1
+  test_runs: 3
+  measure_memory: true

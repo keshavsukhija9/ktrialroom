@@ -1,0 +1,30 @@
+# SiliconVTON — stack compatible with vendored IDM-VTON (third_party/idm-vton).
+# Newer diffusers drops symbols used by upstream UNet (e.g. PositionNet); keep 0.25.x line.
+# huggingface_hub must satisfy diffusers 0.25 + Gradio 4.x.
+
+torch>=2.4.0
+torchvision>=0.19.0
+
+diffusers==0.25.1
+transformers==4.36.2
+accelerate==0.25.0
+huggingface_hub>=0.19.0,<0.21
+hf_transfer>=0.1.6
+safetensors>=0.4.0
+einops>=0.7.0
+
+opencv-python>=4.10.0
+mediapipe==0.10.14
+Pillow>=10.4.0
+numpy>=1.26.0
+scipy>=1.11.0
+PyYAML>=6.0.1
+tqdm>=4.66.0
+
+torchmetrics>=1.4.0
+lpips>=0.1.4
+
+gradio>=4.40.0,<5.0.0
+psutil>=5.9.0
+
+pytest>=8.0.0

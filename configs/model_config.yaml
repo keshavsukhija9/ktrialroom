@@ -1,0 +1,18 @@
+model:
+  # Local weights (recommended): huggingface-cli download yisol/IDM-VTON \
+  #   --local-dir models/IDM-VTON --resume-download
+  # Or absolute path, e.g. /Users/you/resume_tryon/models/IDM-VTON
+  name: "models/IDM-VTON"
+  revision: "main"
+  use_safetensors: true
+
+inference:
+  height: 1024
+  width: 768
+  num_inference_steps: 30
+  guidance_scale: 2.0
+  seed: 42
+
+device:
+  backend: "mps"   # mps | cpu (auto-fallback in code)
+  allow_tf32: false
