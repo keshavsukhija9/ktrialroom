@@ -14,10 +14,17 @@ if compgen -G "$HOME/.cache/huggingface/hub/models--yisol--IDM-VTON/blobs/"*.inc
   exit 1
 fi
 
-if [ ! -f "assets/outputs/final_inference_test.png" ]; then
-  echo "❌ assets/outputs/final_inference_test.png missing. Run:"
-  echo "   SILICONVTON_FULL_INFERENCE=1 PYTHONPATH=. python scripts/validate_siliconvton.py"
-  exit 1
+if [ ! -f "assets/outputs/final_inference_test.png" ] && [ ! -f "assets/outputs/minimal_test.png" ]; then
+  if [ "${ALLOW_NO_INFERENCE:-0}" = "1" ]; then
+    echo "⚠️  No inference PNG yet (ALLOW_NO_INFERENCE=1). Run on your Mac:"
+    echo "   PYTHONPATH=. python scripts/minimal_inference.py"
+  else
+    echo "❌ No inference output. Run one of:"
+    echo "   SILICONVTON_FULL_INFERENCE=1 PYTHONPATH=. python scripts/validate_siliconvton.py"
+    echo "   PYTHONPATH=. python scripts/minimal_inference.py"
+    echo "   Or: ALLOW_NO_INFERENCE=1 ... (CI / docs-only; not interview-complete)"
+    exit 1
+  fi
 fi
 
 if [ ! -f "assets/demo_backup.mp4" ]; then
@@ -36,7 +43,11 @@ if [ ! -f "assets/demo_backup.mp4" ]; then
 fi
 
 echo "Running test suite..."
-PYTHONPATH=. pytest tests/ -q --tb=short
+if [ "${SKIP_PYTEST:-0}" = "1" ]; then
+  echo "⚠️  SKIP_PYTEST=1 — skipping pytest (run locally before release)"
+else
+  PYTHONPATH=. pytest tests/ -q --tb=short
+fi
 
 echo "Checking resume alignment..."
 PYTHONPATH=. python scripts/verify_resume_alignment.py

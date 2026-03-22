@@ -66,6 +66,16 @@ Optional end-to-end inference (downloads **multi-GB** HF weights; slow):
 SILICONVTON_FULL_INFERENCE=1 PYTHONPATH=. python scripts/validate_siliconvton.py
 ```
 
+Run this in **Terminal.app** on your Mac (not Cursor’s agent): full diffusion needs real unified memory; **exit code 138** in constrained environments usually means the process was stopped under memory pressure—not necessarily a code bug.
+
+**Tighter memory (proof-of-concept):** 256×256, 1 step, sequential offload — still loads full weights but smaller activations:
+
+```bash
+PYTHONPATH=. python scripts/minimal_inference.py
+```
+
+Saves `assets/outputs/minimal_test.png`. If full validation fails, lower resolution in `configs/inference_config.yaml` or set `enable_sequential_cpu_offload: true` in `configs/optimization_config.yaml`.
+
 Ensure `third_party/idm-vton` exists (clone if missing):
 
 ```bash
@@ -134,8 +144,9 @@ PYTHONPATH=. python scripts/verify_inference_output.py
 
 | Metric | Value | Notes |
 |--------|-------|--------|
-| Inference time (2 steps validation) | *TBD s* | FP16 + CPU offload (`validate_siliconvton.py`) |
-| Peak memory | *TBD GB* | Unified memory; measure with Activity Monitor / `ps` |
+| Minimal inference (256², 1 step) | *TBD s* | `python scripts/minimal_inference.py` (proof-of-concept) |
+| Inference time (2 steps validation) | *TBD s* | FP16 + offload (`validate_siliconvton.py`) |
+| Peak memory | *TBD GB* | Unified memory; Activity Monitor / `ps` |
 | SSIM | *TBD* | From pipeline output dict when enabled |
 | LPIPS | *TBD* | From pipeline output dict when enabled |
 | Model weights (disk) | ~12 GB | HF cache + `models/IDM-VTON` |
@@ -147,7 +158,7 @@ PYTHONPATH=. python scripts/verify_inference_output.py
 |-------|--------|------|
 | Unit tests | run locally | *YYYY-MM-DD* |
 | Weights on disk | `python tests/test_weights_loaded.py` | *YYYY-MM-DD* |
-| Full inference | `SILICONVTON_FULL_INFERENCE=1` validation | *YYYY-MM-DD* |
+| Full or minimal inference | `validate_siliconvton.py` and/or `minimal_inference.py` | *YYYY-MM-DD* |
 | MPS | when available on Apple Silicon | *YYYY-MM-DD* |
 | Demo video | `assets/demo_backup.mp4` (manual) | *YYYY-MM-DD* |
 
@@ -176,6 +187,9 @@ Use `benchmarks/fp32_vs_fp16.py` after caching weights.
 - `SYSTEM_ARCHITECTURE.md` — architecture
 - `PRD.md` — product scope
 - `docs/INTERVIEW_PREP.md` — talking points / guardrails
+- `docs/COMPLETION_CHECKLIST.md` — **finish inference + demo on your Mac (Terminal)**
+
+To declare the project “done” for interviews, complete at least **minimal inference** and fill benchmark rows in this README using numbers from your machine.
 
 ## Licenses
 

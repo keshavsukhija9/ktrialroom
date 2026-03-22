@@ -125,6 +125,8 @@ def phase4_inference_optional() -> int:
     cfg = load_merged_config(ROOT)
     cfg["inference"]["num_inference_steps"] = 2
     cfg["optimization"]["precision"] = "fp16"
+    # Prefer sequential offload for full validation on Apple Silicon (lower peak RAM than model offload alone).
+    cfg["optimization"]["enable_sequential_cpu_offload"] = True
     cfg["optimization"]["enable_model_cpu_offload"] = True
 
     pipe = VTONPipeline(cfg)
