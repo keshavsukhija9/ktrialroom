@@ -16,7 +16,13 @@ class DiffusionEngine:
 
     def __init__(self, config: Dict[str, Any], *, lazy_load: bool = True) -> None:
         self.config = config
-        self.device = get_device("auto")
+        backend = str(config.get("device", {}).get("backend", "auto")).lower().strip()
+        if backend == "cpu":
+            self.device = get_device("cpu")
+        elif backend == "mps":
+            self.device = get_device("mps")
+        else:
+            self.device = get_device("auto")
         opt = config.get("optimization", {})
         self.use_fp16 = str(opt.get("precision", "fp16")).lower() == "fp16"
         self.enable_model_cpu_offload = bool(opt.get("enable_model_cpu_offload", True))

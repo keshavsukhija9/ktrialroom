@@ -26,11 +26,11 @@ High-quality Virtual Try-On models are typically cloud-dependent due to heavy VR
 
 ## 3. Resume Bullets (copy-paste)
 
-- Engineered a 1024×768 garment transfer pipeline using IDM-VTON and ControlNet, optimized for Apple Silicon (MPS) backend for local deployment.
-- Reduced inference memory footprint by 50% via FP16 quantization and model offloading strategies, enabling SOTA diffusion on consumer hardware.
-- Integrated Perceptual Quality Metrics (LPIPS/SSIM) with **MediaPipe** pose estimation and **DeepLabV3** segmentation for structural consistency and color fidelity without retraining base models.
+- Engineered a 1024×768 garment transfer pipeline using **IDM-VTON** with **pose and garment conditioning** (not generic ControlNet), optimized for Apple Silicon (MPS) for local deployment.
+- Engineered lightweight preprocessing (**MediaPipe** pose + **DeepLabV3** segmentation), optimizing for consumer hardware; implemented **FP16** and **sequential CPU offloading**, reducing memory footprint by **~50%** on Apple Silicon M4 (measure and quote your own numbers).
+- Integrated **LPIPS/SSIM** evaluation (not training loss) for structural and perceptual checks without retraining the base model.
 
-*Note: Resume bullets should describe **MediaPipe + DeepLabV3** (this build)—not legacy heavy pose/segmentation tooling unless you ship it.*
+*Note: Do **not** claim **ControlNet** or **TPS warping** for this repo. Do not name third-party pose/segmentation stacks that this codebase does not integrate — describe **MediaPipe**, **DeepLabV3**, and **letterboxed garment prep** only.*
 
 ---
 

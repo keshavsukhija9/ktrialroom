@@ -1,6 +1,10 @@
 # SiliconVTON
 
+[![CI](https://github.com/keshavsukhija9/ktrialroom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/keshavsukhija9/ktrialroom/actions)
+
 Local-first **virtual try-on** inference using the pre-trained **IDM-VTON** weights (`yisol/IDM-VTON`) on **Apple Silicon (PyTorch MPS)** with **FP16** and **CPU offloading**. This repository is **inference-only** (no model training).
+
+**Repo status:** Application code, configs, validation scripts, troubleshooting docs, and **GitHub Actions** CI are in place. **Machine-local steps** remain: clone `third_party/idm-vton`, download weights to `models/IDM-VTON`, run **`scripts/minimal_inference.py`** (or full validation), then fill the **benchmark** table below with your timings.
 
 ## Highlights
 
@@ -47,6 +51,8 @@ pip install -e .
 - **`mediapipe==0.10.14`** — Some newer macOS wheels omit `mediapipe.solutions` (pose). This pin keeps the classic pose API.
 - **`einops`** — Required by upstream `third_party/idm-vton` UNets.
 
+**`import torch` takes minutes, or `pip` itself hangs?** Usually a **bad PyTorch wheel** or **corrupted venv** — not normal slowness. See **[docs/COMPLETION_CHECKLIST.md](docs/COMPLETION_CHECKLIST.md) §2** (reinstall Torch), then **§2.1** if `pip` is stuck for many minutes (delete `.venv`, recreate). **`pip` shows torch but `import torch` fails, or `which python` is wrong?** Use **§2.1b** (clear `~/Library/Caches/pip`, explicit `.venv/bin/python`, **torch-first** install). After install succeeds, **§2.2** has verify + **minimal inference**. *`requirements.txt` allows `torch>=2.4.0`; newer ARM64 builds (e.g. 2.11.x) are OK if MPS works.*
+
 ## QA validation (before demos / interviews)
 
 ```bash
@@ -71,8 +77,11 @@ Run this in **Terminal.app** on your Mac (not Cursor’s agent): full diffusion 
 **Tighter memory (proof-of-concept):** 256×256, 1 step, sequential offload — still loads full weights but smaller activations:
 
 ```bash
-PYTHONPATH=. python scripts/minimal_inference.py
+PYTHONUNBUFFERED=1 PYTHONPATH=. python scripts/test_critical_imports.py   # if unsure where it hangs
+PYTHONUNBUFFERED=1 PYTHONPATH=. python scripts/minimal_inference.py 2>&1 | tee inference_log.txt
 ```
+
+If RSS stays ~tens of MB, check the last **`[n/9]`** line in the log — that marks the last completed stage before the stall.
 
 Saves `assets/outputs/minimal_test.png`. If full validation fails, lower resolution in `configs/inference_config.yaml` or set `enable_sequential_cpu_offload: true` in `configs/optimization_config.yaml`.
 
@@ -142,25 +151,30 @@ PYTHONPATH=. python scripts/verify_inference_output.py
 
 ## Benchmark results (M4 — fill in from your runs)
 
+After `minimal_inference.py` or full validation, paste real numbers here (Activity Monitor / `ps` for peak RSS).
+
 | Metric | Value | Notes |
 |--------|-------|--------|
-| Minimal inference (256², 1 step) | *TBD s* | `python scripts/minimal_inference.py` (proof-of-concept) |
-| Inference time (2 steps validation) | *TBD s* | FP16 + offload (`validate_siliconvton.py`) |
-| Peak memory | *TBD GB* | Unified memory; Activity Monitor / `ps` |
-| SSIM | *TBD* | From pipeline output dict when enabled |
-| LPIPS | *TBD* | From pipeline output dict when enabled |
+| Minimal inference (256², 1 step) | *TBD s* | `python scripts/minimal_inference.py` (FP16 + sequential offload) |
+| Inference time (2 steps validation) | *TBD s* | `SILICONVTON_FULL_INFERENCE=1` + `validate_siliconvton.py` |
+| Peak memory | *TBD GB* | Unified memory |
+| SSIM | *TBD* | From pipeline `metrics` dict |
+| LPIPS | *TBD* | From pipeline `metrics` dict |
 | Model weights (disk) | ~12 GB | HF cache + `models/IDM-VTON` |
 | Preprocessing | *TBD s* | MediaPipe + DeepLabV3 |
 
+**Stuck at ~75 MB RSS?** Run `PYTHONUNBUFFERED=1 PYTHONPATH=. python scripts/debug_five_imports.py` — the first failing or hanging step is the bottleneck. Step 4 does **not** load weights; multi-GB load happens at first `generate()` / `load_tryon_pipeline`.
+
 ## Verification status
 
-| Check | Status | Date |
-|-------|--------|------|
-| Unit tests | run locally | *YYYY-MM-DD* |
-| Weights on disk | `python tests/test_weights_loaded.py` | *YYYY-MM-DD* |
-| Full or minimal inference | `validate_siliconvton.py` and/or `minimal_inference.py` | *YYYY-MM-DD* |
-| MPS | when available on Apple Silicon | *YYYY-MM-DD* |
-| Demo video | `assets/demo_backup.mp4` (manual) | *YYYY-MM-DD* |
+| Check | Status | Notes |
+|-------|--------|--------|
+| CI (docs + light tests) | [GitHub Actions](https://github.com/keshavsukhija9/ktrialroom/actions) | `verify_resume_alignment` + CPU torch unit subset |
+| Full unit tests + vendor imports | run locally | `pytest tests/ -q` (needs `third_party/idm-vton`, torch stack) |
+| Weights on disk | run locally | `python tests/test_weights_loaded.py` |
+| Full or minimal inference | run locally | `minimal_inference.py` / `SILICONVTON_FULL_INFERENCE=1` + `validate_siliconvton.py` |
+| MPS | Apple Silicon | See `docs/COMPLETION_CHECKLIST.md` §2.2 |
+| Demo video | optional | `assets/demo_backup.mp4` (manual) |
 
 ## Demo
 

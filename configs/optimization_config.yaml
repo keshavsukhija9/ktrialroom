@@ -1,10 +1,15 @@
+# Note: Some fields are legacy from earlier iterations.
+# Active optimizations in code: FP16 + enable_model_cpu_offload / enable_sequential_cpu_offload
+# (DiffusionEngine reads only precision + the two *_cpu_offload flags.)
+
 optimization:
   precision: "fp16"   # fp16 | fp32
-  enable_cpu_offload: true
+  # enable_cpu_offload — not read by code (legacy placeholder)
   enable_model_cpu_offload: true
-  enable_sequential_cpu_offload: false
+  enable_sequential_cpu_offload: true
 
-benchmarking:
-  warmup_runs: 1
-  test_runs: 3
-  measure_memory: true
+# benchmarking — merged in load_merged_config but not used by pipeline/benchmarks yet
+# benchmarking:
+#   warmup_runs: 1
+#   test_runs: 3
+#   measure_memory: true

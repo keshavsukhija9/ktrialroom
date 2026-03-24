@@ -1,0 +1,34 @@
+# Lightweight CI: no GPU/torch required for the docs gate; CPU torch only for a subset of tests.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Resume / stack wording check
+        run: python scripts/verify_resume_alignment.py
+
+  test-light:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PyTorch (CPU) + minimal test deps
+        run: |
+          pip install --upgrade pip
+          pip install pytest numpy pillow pyyaml scipy
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      - name: Tests (no IDM vendor, no HF weights, no LPIPS)
+        run: PYTHONPATH=. pytest tests/test_mask_builder.py tests/test_image_validator.py tests/test_device_utils.py -q --tb=short
