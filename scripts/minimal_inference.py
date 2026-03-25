@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 import time
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,8 +71,10 @@ def main() -> int:
     from siliconvton.core.vton_pipeline import VTONPipeline
 
     cfg = load_merged_config(repo_root())
-    cfg["inference"]["width"] = 256
-    cfg["inference"]["height"] = 256
+    w = int(os.environ.get("SILICONVTON_MIN_WIDTH", "256"))
+    h = int(os.environ.get("SILICONVTON_MIN_HEIGHT", "256"))
+    cfg["inference"]["width"] = w
+    cfg["inference"]["height"] = h
     cfg["inference"]["num_inference_steps"] = 1
     cfg["optimization"]["precision"] = "fp16"
     cfg["optimization"]["enable_sequential_cpu_offload"] = True
