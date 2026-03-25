@@ -49,9 +49,11 @@ class DiffusionEngine:
         pipe, _ = load_tryon_pipeline(model_id, torch_dtype=dtype)
 
         if self.enable_sequential_cpu_offload:
-            pipe.enable_sequential_cpu_offload()
+            # diffusers defaults execution device to CUDA unless specified.
+            # On Apple Silicon we must pass MPS/CPU explicitly to avoid "Torch not compiled with CUDA enabled".
+            pipe.enable_sequential_cpu_offload(device=self.device)
         elif self.enable_model_cpu_offload:
-            pipe.enable_model_cpu_offload()
+            pipe.enable_model_cpu_offload(device=self.device)
         else:
             pipe.to(self.device)
 

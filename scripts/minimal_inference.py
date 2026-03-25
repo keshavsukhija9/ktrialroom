@@ -26,6 +26,12 @@ def _log(msg: str) -> None:
 
 
 def main() -> int:
+    # Torch 2.x may import torch._dynamo / sympy transitively via torchvision.
+    # For a minimal smoke test we disable Dynamo to reduce import overhead and avoid
+    # rare environment-specific import stalls.
+    os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+    os.environ.setdefault("TORCHINDUCTOR_DISABLE", "1")
+
     _log("[1/9] minimal_inference: entering main()")
 
     _log("[2/9] importing PIL…")
@@ -44,8 +50,15 @@ def main() -> int:
     from siliconvton.utils.project_config import load_merged_config, repo_root
 
     _log("[6/9] device + preprocessing (MediaPipe / torchvision DeepLab load here)…")
+    _log("     [6a] importing PoseEstimator (mediapipe)…")
     from siliconvton.preprocessing.pose_estimator import PoseEstimator
-    from siliconvton.preprocessing.segmenter import HumanSegmenter
+    skip_seg = os.environ.get("SILICONVTON_SKIP_SEGMENTER", "0") == "1"
+    if skip_seg:
+        _log("     [6b] SILICONVTON_SKIP_SEGMENTER=1 — using full-image mask (no DeepLab)")
+    else:
+        _log("     [6b] importing HumanSegmenter (torchvision deeplab)…")
+        from siliconvton.preprocessing.segmenter import HumanSegmenter
+    _log("     [6c] importing get_device…")
     from siliconvton.utils.device_utils import get_device
 
     person_p = ROOT / "assets" / "sample_inputs" / "person_1.jpg"
@@ -64,8 +77,12 @@ def main() -> int:
     kps = PoseEstimator().extract_keypoints(bgr)
     _log(f"✅ Pose extracted: {len(kps)} keypoints")
 
-    mask = HumanSegmenter(device=torch.device("cpu")).get_segmentation_mask(person)
-    _log(f"✅ Segmentation mask generated ({mask.shape[0]}×{mask.shape[1]})")
+    if skip_seg:
+        mask = np.ones((person.height, person.width), dtype=bool)
+        _log(f"✅ Segmentation mask (fallback) generated ({mask.shape[0]}×{mask.shape[1]})")
+    else:
+        mask = HumanSegmenter(device=torch.device("cpu")).get_segmentation_mask(person)
+        _log(f"✅ Segmentation mask generated ({mask.shape[0]}×{mask.shape[1]})")
 
     _log("[7/9] importing VTONPipeline (pulls diffusion_engine; still lazy until generate)…")
     from siliconvton.core.vton_pipeline import VTONPipeline
