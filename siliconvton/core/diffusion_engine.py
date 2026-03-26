@@ -46,7 +46,10 @@ class DiffusionEngine:
             return
         dtype = torch.float16 if self.use_fp16 else torch.float32
         model_id = self.config["model"]["name"]
+        # Helpful runtime visibility: weight loading is the slow/heavy step.
+        print(f"🔄 Loading IDM-VTON pipeline weights (dtype={dtype}, device={self.device.type})…", flush=True)
         pipe, _ = load_tryon_pipeline(model_id, torch_dtype=dtype)
+        print("✅ Weights loaded; applying offload/device placement…", flush=True)
 
         if self.enable_sequential_cpu_offload:
             # diffusers defaults execution device to CUDA unless specified.
@@ -56,6 +59,7 @@ class DiffusionEngine:
             pipe.enable_model_cpu_offload(device=self.device)
         else:
             pipe.to(self.device)
+        print("✅ Pipeline ready.", flush=True)
 
         self._pipe = pipe
 

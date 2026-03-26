@@ -90,12 +90,28 @@ def main() -> int:
     cfg = load_merged_config(repo_root())
     w = int(os.environ.get("SILICONVTON_MIN_WIDTH", "256"))
     h = int(os.environ.get("SILICONVTON_MIN_HEIGHT", "256"))
+    # If the user chooses extremely small sizes (e.g. 32×32), MediaPipe pose often fails.
+    # For the smoke test we allow a deterministic fallback skeleton.
+    if min(w, h) < 128:
+        os.environ.setdefault("SILICONVTON_POSE_FALLBACK", "1")
     cfg["inference"]["width"] = w
     cfg["inference"]["height"] = h
     cfg["inference"]["num_inference_steps"] = 1
     cfg["optimization"]["precision"] = "fp16"
-    cfg["optimization"]["enable_sequential_cpu_offload"] = True
-    cfg["optimization"]["enable_model_cpu_offload"] = True
+    offload_mode = os.environ.get("SILICONVTON_OFFLOAD_MODE", "model").strip().lower()
+    # sequential offload reduces peak memory but can be slower / heavier to initialize.
+    if offload_mode in ("sequential", "seq"):
+        cfg["optimization"]["enable_sequential_cpu_offload"] = True
+        cfg["optimization"]["enable_model_cpu_offload"] = True
+        _log("     offload: sequential_cpu_offload=1 (lower peak memory)")
+    elif offload_mode in ("none", "off"):
+        cfg["optimization"]["enable_sequential_cpu_offload"] = False
+        cfg["optimization"]["enable_model_cpu_offload"] = False
+        _log("     offload: disabled (fastest, highest peak memory)")
+    else:
+        cfg["optimization"]["enable_sequential_cpu_offload"] = False
+        cfg["optimization"]["enable_model_cpu_offload"] = True
+        _log("     offload: model_cpu_offload=1 (balanced default)")
 
     _log("[8/9] constructing VTONPipeline…")
     t0 = time.perf_counter()

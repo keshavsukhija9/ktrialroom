@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Dict, Optional
 
@@ -21,6 +22,12 @@ from siliconvton.preprocessing.segmenter import HumanSegmenter
 
 class VTONPipeline:
     """Orchestrates preprocessing + IDM-VTON inference + evaluation metrics."""
+
+    def _pose_fallback_keypoints(self) -> Dict[int, Dict[str, float]]:
+        """Deterministic dummy keypoints (for smoke tests only)."""
+        cx = float(self._w) / 2.0
+        cy = float(self._h) / 2.0
+        return {i: {"x": cx, "y": cy, "z": 0.0, "visibility": 0.0} for i in range(33)}
 
     def __init__(self, config: Dict[str, Any]) -> None:
         self.config = config
@@ -60,7 +67,15 @@ class VTONPipeline:
         garment_v = self.validator.letterbox(garment_image)
 
         bgr = cv2.cvtColor(np.asarray(person_v), cv2.COLOR_RGB2BGR)
-        keypoints = self.pose_estimator.extract_keypoints(bgr)
+        try:
+            keypoints = self.pose_estimator.extract_keypoints(bgr)
+        except ValueError as e:
+            # MediaPipe can fail at tiny resolutions or edge-case inputs.
+            # Allow a fallback skeleton for smoke tests when explicitly enabled.
+            if os.environ.get("SILICONVTON_POSE_FALLBACK", "0") == "1" and "No pose" in str(e):
+                keypoints = self._pose_fallback_keypoints()
+            else:
+                raise
 
         mask_bool = self.segmenter.get_segmentation_mask(person_v)
         torso = torso_inpaint_region(mask_bool)
