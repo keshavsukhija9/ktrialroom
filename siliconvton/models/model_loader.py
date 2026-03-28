@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple, Union
 
 import torch
 from diffusers import AutoencoderKL, DDPMScheduler
@@ -69,27 +69,41 @@ def load_tryon_pipeline(
     model_id: str,
     *,
     torch_dtype: torch.dtype,
+    device: Optional[Union[str, torch.device]] = None,
 ) -> Tuple[Any, dict]:
-    """Build TryonPipeline + return component handles for optional offload hooks."""
+    """Build TryonPipeline + return component handles for optional offload hooks.
+
+    Pass ``device="cpu"`` to keep weights on CPU during load, then use
+    ``enable_sequential_cpu_offload`` / ``enable_model_cpu_offload`` so components
+    stream to MPS/CUDA without a full-model spike on the accelerator.
+    """
     TryonPipeline, UNetTryon, UNetEncoder = import_tryon_modules()
     model_id = resolve_model_id(model_id)
 
-    unet = UNetTryon.from_pretrained(model_id, subfolder="unet", torch_dtype=torch_dtype)
+    unet = UNetTryon.from_pretrained(
+        model_id, subfolder="unet", torch_dtype=torch_dtype, low_cpu_mem_usage=True
+    )
     unet.requires_grad_(False)
 
     tokenizer_one = AutoTokenizer.from_pretrained(model_id, subfolder="tokenizer", use_fast=False)
     tokenizer_two = AutoTokenizer.from_pretrained(model_id, subfolder="tokenizer_2", use_fast=False)
     noise_scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
 
-    text_encoder_one = CLIPTextModel.from_pretrained(model_id, subfolder="text_encoder", torch_dtype=torch_dtype)
+    text_encoder_one = CLIPTextModel.from_pretrained(
+        model_id, subfolder="text_encoder", torch_dtype=torch_dtype, low_cpu_mem_usage=True
+    )
     text_encoder_two = CLIPTextModelWithProjection.from_pretrained(
-        model_id, subfolder="text_encoder_2", torch_dtype=torch_dtype
+        model_id, subfolder="text_encoder_2", torch_dtype=torch_dtype, low_cpu_mem_usage=True
     )
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-        model_id, subfolder="image_encoder", torch_dtype=torch_dtype
+        model_id, subfolder="image_encoder", torch_dtype=torch_dtype, low_cpu_mem_usage=True
     )
-    vae = AutoencoderKL.from_pretrained(model_id, subfolder="vae", torch_dtype=torch_dtype)
-    unet_encoder = UNetEncoder.from_pretrained(model_id, subfolder="unet_encoder", torch_dtype=torch_dtype)
+    vae = AutoencoderKL.from_pretrained(
+        model_id, subfolder="vae", torch_dtype=torch_dtype, low_cpu_mem_usage=True
+    )
+    unet_encoder = UNetEncoder.from_pretrained(
+        model_id, subfolder="unet_encoder", torch_dtype=torch_dtype, low_cpu_mem_usage=True
+    )
 
     for m in (unet_encoder, vae, text_encoder_one, text_encoder_two, image_encoder, unet):
         m.requires_grad_(False)
@@ -106,8 +120,15 @@ def load_tryon_pipeline(
         scheduler=noise_scheduler,
         image_encoder=image_encoder,
         torch_dtype=torch_dtype,
+        low_cpu_mem_usage=True,
     )
     pipe.unet_encoder = unet_encoder
 
-    meta = {"dtype": torch_dtype}
+    if device is not None:
+        dev = torch.device(device)
+        pipe = pipe.to(dev)
+        if getattr(pipe, "unet_encoder", None) is not None:
+            pipe.unet_encoder = pipe.unet_encoder.to(dev)
+
+    meta = {"dtype": torch_dtype, "device": device}
     return pipe, meta

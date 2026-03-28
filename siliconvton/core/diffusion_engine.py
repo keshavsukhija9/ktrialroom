@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+import numpy as np
 import torch
 from PIL import Image
-from torchvision import transforms
 
 from siliconvton.models.model_loader import load_tryon_pipeline
 from siliconvton.optimization.precision_handler import inference_autocast
@@ -25,21 +25,20 @@ class DiffusionEngine:
             self.device = get_device("auto")
         opt = config.get("optimization", {})
         self.use_fp16 = str(opt.get("precision", "fp16")).lower() == "fp16"
-        self.enable_model_cpu_offload = bool(opt.get("enable_model_cpu_offload", True))
         self.enable_sequential_cpu_offload = bool(opt.get("enable_sequential_cpu_offload", False))
 
         self._pipe = None
         self._lazy = lazy_load
 
-        self.tensor_rgb = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-            ]
-        )
-
         if not lazy_load:
             self._ensure_pipe()
+
+    @staticmethod
+    def _tensor_rgb(image: Image.Image) -> torch.Tensor:
+        """Convert PIL RGB image to normalized CHW tensor in [-1, 1] without torchvision."""
+        arr = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
+        t = torch.from_numpy(arr).permute(2, 0, 1).contiguous()
+        return (t - 0.5) / 0.5
 
     def _ensure_pipe(self) -> None:
         if self._pipe is not None:
@@ -47,16 +46,15 @@ class DiffusionEngine:
         dtype = torch.float16 if self.use_fp16 else torch.float32
         model_id = self.config["model"]["name"]
         # Helpful runtime visibility: weight loading is the slow/heavy step.
-        print(f"🔄 Loading IDM-VTON pipeline weights (dtype={dtype}, device={self.device.type})…", flush=True)
-        pipe, _ = load_tryon_pipeline(model_id, torch_dtype=dtype)
+        print(f"🔄 Loading IDM-VTON pipeline weights (dtype={dtype}, load_device=cpu → {self.device.type})…", flush=True)
+        pipe, _ = load_tryon_pipeline(model_id, torch_dtype=dtype, device="cpu")
         print("✅ Weights loaded; applying offload/device placement…", flush=True)
 
         if self.enable_sequential_cpu_offload:
             # diffusers defaults execution device to CUDA unless specified.
             # On Apple Silicon we must pass MPS/CPU explicitly to avoid "Torch not compiled with CUDA enabled".
+            # Per-model offload is not used: sequential offload moves components to MPS on demand and back to CPU after.
             pipe.enable_sequential_cpu_offload(device=self.device)
-        elif self.enable_model_cpu_offload:
-            pipe.enable_model_cpu_offload(device=self.device)
         else:
             pipe.to(self.device)
         print("✅ Pipeline ready.", flush=True)
@@ -132,8 +130,8 @@ class DiffusionEngine:
             negative_prompt=negative_prompt,
         )
 
-        pose_t = self.tensor_rgb(pose_image).unsqueeze(0).to(device, dtype=dtype)
-        garm_t = self.tensor_rgb(garment_image).unsqueeze(0).to(device, dtype=dtype)
+        pose_t = self._tensor_rgb(pose_image).unsqueeze(0).to(device, dtype=dtype)
+        garm_t = self._tensor_rgb(garment_image).unsqueeze(0).to(device, dtype=dtype)
 
         gen_dev = device
         if device.type == "mps":

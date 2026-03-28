@@ -42,22 +42,25 @@ def main() -> int:
 
     _log(f"     torch {torch.__version__} | mps_built={torch.backends.mps.is_built()}")
 
-    _log("[4/9] importing cv2, numpy…")
-    import cv2
+    _log("[4/9] importing numpy…")
     import numpy as np
 
     _log("[5/9] loading project config…")
     from siliconvton.utils.project_config import load_merged_config, repo_root
 
-    _log("[6/9] device + preprocessing (MediaPipe / torchvision DeepLab load here)…")
-    _log("     [6a] importing PoseEstimator (mediapipe)…")
-    from siliconvton.preprocessing.pose_estimator import PoseEstimator
+    _log("[6/9] device + optional preprocessing…")
+    use_vton_pipeline = os.environ.get("SILICONVTON_USE_VTON_PIPELINE", "0") == "1"
     skip_seg = os.environ.get("SILICONVTON_SKIP_SEGMENTER", "0") == "1"
-    if skip_seg:
-        _log("     [6b] SILICONVTON_SKIP_SEGMENTER=1 — using full-image mask (no DeepLab)")
+    if use_vton_pipeline:
+        _log("     [6a] importing PoseEstimator (mediapipe)…")
+        from siliconvton.preprocessing.pose_estimator import PoseEstimator
+        if skip_seg:
+            _log("     [6b] SILICONVTON_SKIP_SEGMENTER=1 — using full-image mask (no DeepLab)")
+        else:
+            _log("     [6b] importing HumanSegmenter (torchvision deeplab)…")
+            from siliconvton.preprocessing.segmenter import HumanSegmenter
     else:
-        _log("     [6b] importing HumanSegmenter (torchvision deeplab)…")
-        from siliconvton.preprocessing.segmenter import HumanSegmenter
+        _log("     [6a] direct smoke mode: skipping cv2/MediaPipe/DeepLab imports")
     _log("     [6c] importing get_device…")
     from siliconvton.utils.device_utils import get_device
 
@@ -73,19 +76,27 @@ def main() -> int:
     person = Image.open(person_p).convert("RGB")
     garment = Image.open(garment_p).convert("RGB")
 
-    bgr = cv2.cvtColor(np.asarray(person), cv2.COLOR_RGB2BGR)
-    kps = PoseEstimator().extract_keypoints(bgr)
-    _log(f"✅ Pose extracted: {len(kps)} keypoints")
+    if use_vton_pipeline:
+        import cv2
 
-    if skip_seg:
-        mask = np.ones((person.height, person.width), dtype=bool)
-        _log(f"✅ Segmentation mask (fallback) generated ({mask.shape[0]}×{mask.shape[1]})")
+        bgr = cv2.cvtColor(np.asarray(person), cv2.COLOR_RGB2BGR)
+        kps = PoseEstimator().extract_keypoints(bgr)
+        _log(f"✅ Pose extracted: {len(kps)} keypoints")
+
+        if skip_seg:
+            mask = np.ones((person.height, person.width), dtype=bool)
+            _log(f"✅ Segmentation mask (fallback) generated ({mask.shape[0]}×{mask.shape[1]})")
+        else:
+            mask = HumanSegmenter(device=torch.device("cpu")).get_segmentation_mask(person)
+            _log(f"✅ Segmentation mask generated ({mask.shape[0]}×{mask.shape[1]})")
+
+        _log("[7/9] importing VTONPipeline (full preprocessing route)…")
+        from siliconvton.core.vton_pipeline import VTONPipeline
     else:
-        mask = HumanSegmenter(device=torch.device("cpu")).get_segmentation_mask(person)
-        _log(f"✅ Segmentation mask generated ({mask.shape[0]}×{mask.shape[1]})")
-
-    _log("[7/9] importing VTONPipeline (pulls diffusion_engine; still lazy until generate)…")
-    from siliconvton.core.vton_pipeline import VTONPipeline
+        _log("✅ Pose/segmentation bypassed for direct smoke inference")
+        _log("[7/9] importing DiffusionEngine + mask/pose helpers (direct route)…")
+        from siliconvton.core.diffusion_engine import DiffusionEngine
+        from siliconvton.preprocessing.mask_builder import inpaint_mask_to_pil
 
     cfg = load_merged_config(repo_root())
     w = int(os.environ.get("SILICONVTON_MIN_WIDTH", "256"))
@@ -113,20 +124,41 @@ def main() -> int:
         cfg["optimization"]["enable_model_cpu_offload"] = True
         _log("     offload: model_cpu_offload=1 (balanced default)")
 
-    _log("[8/9] constructing VTONPipeline…")
+    _log("[8/9] constructing pipeline object…")
     t0 = time.perf_counter()
-    pipe = VTONPipeline(cfg)
+    if use_vton_pipeline:
+        pipe = VTONPipeline(cfg)
+    else:
+        pipe = DiffusionEngine(cfg, lazy_load=True)
     _log(f"✅ Pipeline object ready ({time.perf_counter() - t0:.1f}s) — weights load on first generate")
 
     _log("[9/9] running diffusion (expect RSS to jump when UNet loads)…")
     t_inf = time.perf_counter()
-    out = pipe(
-        person,
-        garment,
-        "Short Sleeve T-shirt",
-        num_inference_steps=1,
-        seed=0,
-    )
+    if use_vton_pipeline:
+        out = pipe(
+            person,
+            garment,
+            "Short Sleeve T-shirt",
+            num_inference_steps=1,
+            seed=0,
+        )
+    else:
+        # Minimal direct conditioning tensors: zero pose map + full inpaint mask.
+        from PIL import Image as _PILImage
+
+        pose_pil = _PILImage.new("RGB", (w, h), color=(0, 0, 0))
+        mask_bool = np.ones((h, w), dtype=bool)
+        mask_pil = inpaint_mask_to_pil(mask_bool)
+        result_img = pipe.generate(
+            person_image=person.resize((w, h)).convert("RGB"),
+            garment_image=garment.resize((w, h)).convert("RGB"),
+            pose_image=pose_pil,
+            mask_image=mask_pil,
+            garment_description="Short Sleeve T-shirt",
+            num_inference_steps=1,
+            seed=0,
+        )
+        out = {"result_image": result_img, "metrics": {}, "performance": {}}
     infer_s = time.perf_counter() - t_inf
     total_s = time.perf_counter() - t0
 

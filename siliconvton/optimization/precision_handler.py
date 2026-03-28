@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import Iterator
 
 import torch
@@ -8,12 +8,10 @@ import torch
 
 @contextmanager
 def inference_autocast(device: torch.device, use_fp16: bool) -> Iterator[None]:
-    """Autocast only on backends where it is typically stable (MPS/CUDA)."""
-    if use_fp16 and device.type == "mps":
-        with torch.autocast(device_type="mps", dtype=torch.float16):
-            yield
-    elif use_fp16 and device.type == "cuda":
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
+    """Autocast on CUDA; MPS skips autocast (torch <2.3 has no MPS autocast support)."""
+    if not use_fp16 or device.type == "mps":
+        with nullcontext():
             yield
     else:
-        yield
+        with torch.autocast(device_type=device.type, dtype=torch.float16):
+            yield
